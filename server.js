@@ -396,6 +396,103 @@ async function sendWelcomeEmail(email, plan) {
   });
 }
 
+// ─── ONBOARDING EMAIL SEQUENCE (J+1, J+3, J+7, J+14, J+30) ──────────────
+async function sendOnboardingSequenceEmail(client, day) {
+  const sequences = {
+    1: {
+      subject: '📊 Votre premier rapport AvisBot',
+      html: (c) => `<div style="font-family:sans-serif;max-width:560px;margin:auto">
+        <h2>Bonjour,</h2>
+        <p>AvisBot surveille activement votre fiche Google depuis hier.</p>
+        <p>Dès qu'un nouvel avis est déposé, une réponse professionnelle sera publiée automatiquement.</p>
+        <p><strong>Conseil J+1 :</strong> Activez le mode preview si vous souhaitez valider les réponses avant publication.</p>
+        <p>Bonne journée !</p><p style="color:#888;font-size:12px">AvisBot — avisbot.io</p></div>`
+    },
+    3: {
+      subject: '✅ AvisBot fonctionne — voici comment ça marche',
+      html: (c) => `<div style="font-family:sans-serif;max-width:560px;margin:auto">
+        <h2>3 jours avec AvisBot 🚀</h2>
+        <p>Voici ce qu'AvisBot fait pour vous en ce moment :</p>
+        <ul>
+          <li>🔍 Surveillance de vos avis Google en temps réel</li>
+          <li>🤖 Génération de réponses personnalisées avec l'IA</li>
+          <li>📤 Publication automatique sur votre fiche Google</li>
+          <li>📧 Notification email après chaque réponse</li>
+        </ul>
+        <p>Vous n'avez rien à faire. AvisBot s'occupe de tout.</p>
+        <p style="color:#888;font-size:12px">AvisBot — avisbot.io</p></div>`
+    },
+    7: {
+      subject: '📈 Bilan semaine 1 avec AvisBot',
+      html: (c) => `<div style="font-family:sans-serif;max-width:560px;margin:auto">
+        <h2>1 semaine avec AvisBot ✨</h2>
+        <p>Une semaine s'est écoulée depuis votre démarrage.</p>
+        <p>Saviez-vous que les fiches Google avec un taux de réponse >90% obtiennent <strong>+34% de clics</strong> en moyenne ?</p>
+        <p>AvisBot vous garantit ce taux — automatiquement.</p>
+        <p>Votre essai gratuit se termine dans 7 jours. Pour continuer :</p>
+        <a href="https://avisbot.io/#pricing" style="display:inline-block;background:#2563eb;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold">
+          Voir les plans →
+        </a>
+        <p style="color:#888;font-size:12px">AvisBot — avisbot.io</p></div>`
+    },
+    14: {
+      subject: '⏰ 14 jours — votre essai gratuit se termine bientôt',
+      html: (c) => `<div style="font-family:sans-serif;max-width:560px;margin:auto">
+        <h2>Votre essai gratuit se termine dans 14 jours ⚡</h2>
+        <p>AvisBot a répondu à vos avis pendant 2 semaines. Pas une seule réponse manquée.</p>
+        <p>Pour continuer à protéger votre réputation Google :</p>
+        <a href="https://buy.stripe.com/5kQdRbbb29ybg2vgt94ko0b" style="display:inline-block;background:#16a34a;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold">
+          Activer mon plan Solo 79€/mois →
+        </a>
+        <p>Des questions ? Répondez à cet email, je vous réponds sous 24h.</p>
+        <p style="color:#888;font-size:12px">AvisBot — avisbot.io</p></div>`
+    },
+    30: {
+      subject: '🏆 1 mois avec AvisBot — merci !',
+      html: (c) => `<div style="font-family:sans-serif;max-width:560px;margin:auto">
+        <h2>1 mois ! 🎉</h2>
+        <p>Merci de faire confiance à AvisBot.</p>
+        <p>En 30 jours, AvisBot a :</p>
+        <ul>
+          <li>Surveillé votre fiche Google 24h/24</li>
+          <li>Répondu à chaque avis reçu</li>
+          <li>Maintenu votre taux de réponse à 100%</li>
+        </ul>
+        <p>Vous êtes satisfait ? <a href="mailto:contact@avisbot.io">Partagez votre avis</a> — ça nous aide énormément.</p>
+        <p style="color:#888;font-size:12px">AvisBot — avisbot.io</p></div>`
+    }
+  };
+
+  const seq = sequences[day];
+  if (!seq) return;
+  await resend.emails.send({
+    from: process.env.EMAIL_FROM || 'AvisBot <onboarding@resend.dev>',
+    to: client.email,
+    subject: seq.subject,
+    html: seq.html(client)
+  });
+  console.log(`Onboarding email J+${day} envoyé à ${client.email}`);
+}
+
+// Cron onboarding sequence — vérifie tous les jours à 10h UTC
+const cron = require('node-cron');
+cron.schedule('0 10 * * *', async () => {
+  try {
+    const { data: clients } = await supabase.from('clients').select('*').eq('status', 'active');
+    if (!clients) return;
+    for (const client of clients) {
+      const created = new Date(client.created_at);
+      const now = new Date();
+      const daysDiff = Math.floor((now - created) / (1000 * 60 * 60 * 24));
+      if ([1, 3, 7, 14, 30].includes(daysDiff)) {
+        await sendOnboardingSequenceEmail(client, daysDiff);
+      }
+    }
+  } catch (err) {
+    console.error('Onboarding sequence error:', err.message);
+  }
+});
+
 // ─── UTILS ────────────────────────────────────────────────────────────────
 function getPlanName(priceId) {
   const plans = {
