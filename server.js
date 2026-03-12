@@ -406,6 +406,57 @@ function getPlanName(priceId) {
   return plans[priceId] || 'Starter';
 }
 
+// ─── APPROVE / REJECT PREVIEW RESPONSE ───────────────────────────────────
+app.get('/approve-response', async (req, res) => {
+  const { clientId, reviewId, action } = req.query;
+  if (!clientId || !reviewId || !['approve', 'stop'].includes(action)) {
+    return res.status(400).send('<h2>❌ Paramètres invalides.</h2>');
+  }
+  try {
+    const { data: pending, error } = await supabase
+      .from('review_log')
+      .select('*')
+      .eq('review_id', reviewId)
+      .eq('client_id', clientId)
+      .eq('status', 'pending_approval')
+      .single();
+
+    if (error || !pending) {
+      return res.status(404).send('<h2>⚠️ Avis introuvable ou déjà traité.</h2>');
+    }
+
+    const { data: client } = await supabase
+      .from('clients')
+      .select('*')
+      .eq('id', clientId)
+      .single();
+
+    if (action === 'approve') {
+      // Publier sur Google Business
+      const fakeReview = { reviewId: pending.review_id, name: pending.review_name || reviewId };
+      await postResponse(client, fakeReview, pending.response_text);
+      await supabase.from('review_log').update({ status: 'published' }).eq('review_id', reviewId).eq('client_id', clientId);
+      res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="font-family:sans-serif;text-align:center;padding:40px;background:#f0fdf4">
+<div style="font-size:60px">✅</div>
+<h2 style="color:#16a34a">Réponse publiée sur Google !</h2>
+<p style="color:#555">La réponse a été publiée automatiquement sur votre fiche Google Business.</p>
+</body></html>`);
+    } else {
+      await supabase.from('review_log').update({ status: 'rejected' }).eq('review_id', reviewId).eq('client_id', clientId);
+      res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="font-family:sans-serif;text-align:center;padding:40px;background:#fff7ed">
+<div style="font-size:60px">⏸️</div>
+<h2 style="color:#ea580c">Réponse annulée.</h2>
+<p style="color:#555">La réponse ne sera pas publiée. Vous pouvez répondre manuellement depuis Google Business.</p>
+</body></html>`);
+    }
+  } catch (err) {
+    console.error('approve-response error:', err);
+    res.status(500).send('<h2>Erreur serveur.</h2>');
+  }
+});
+
 // ─── HEALTH CHECK ─────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'OK', version: '1.0.0' }));
 
