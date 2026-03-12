@@ -2,7 +2,8 @@ const express = require('express');
 const { google } = require('googleapis');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { createClient } = require('@supabase/supabase-js');
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const app = express();
 app.use(express.json());
@@ -198,18 +199,8 @@ async function postResponse(client, review, responseText) {
 
 // ─── 8. NOTIFIER LE CLIENT ────────────────────────────────────────────────
 async function notifyClient(client, review, response) {
-  // Email de notification
-  const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
-    }
-  });
-
   const stars = '⭐'.repeat(parseInt(review.starRating) || 3);
-  await transporter.sendMail({
+  await resend.emails.send({
     from: 'AvisBot <contact@avisbot.io>',
     to: client.email,
     subject: `${stars} Nouvel avis répondu automatiquement`,
@@ -228,18 +219,11 @@ async function notifyClient(client, review, response) {
 
 // ─── 9. EMAIL DE BIENVENUE ────────────────────────────────────────────────
 async function sendWelcomeEmail(email, plan) {
-  const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-  });
-
-  // L'ID client sera créé juste avant, on récupère l'uuid
   const { data } = await supabase.from('clients').select('id').eq('email', email).single();
   const clientId = data?.id;
   const onboardingUrl = `https://avisbot-backend.onrender.com/oauth/start?clientId=${clientId}`;
 
-  await transporter.sendMail({
+  await resend.emails.send({
     from: 'AvisBot <contact@avisbot.io>',
     to: email,
     subject: '🎉 Bienvenue sur AvisBot — 1 étape pour démarrer',
