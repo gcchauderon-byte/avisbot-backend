@@ -218,15 +218,38 @@ app.post('/process-reviews', rateLimit, async (req, res) => {
 });
 
 // ─── 5. GET REVIEWS depuis Google Business ────────────────────────────────
+// Cache accounts par client pour éviter les quota exceeded (TTL 30 min)
+const accountsCache = new Map();
+
 async function getNewReviews(client) {
   oauth2Client.setCredentials({
     access_token: client.google_access_token,
     refresh_token: client.google_refresh_token,
   });
-  
-  const mybusiness = google.mybusinessaccountmanagement({ version: 'v1', auth: oauth2Client });
-  const accounts = await mybusiness.accounts.list();
-  const accountName = accounts.data.accounts[0].name;
+
+  let accountName;
+  const cacheKey = client.id;
+  const cached = accountsCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < 30 * 60 * 1000) {
+    accountName = cached.accountName;
+  } else {
+    const mybusiness = google.mybusinessaccountmanagement({ version: 'v1', auth: oauth2Client });
+    let attempts = 0;
+    while (attempts < 3) {
+      try {
+        const accounts = await mybusiness.accounts.list();
+        accountName = accounts.data.accounts[0].name;
+        accountsCache.set(cacheKey, { accountName, ts: Date.now() });
+        break;
+      } catch (err) {
+        if (err.code === 429 || (err.message && err.message.includes('Quota'))) {
+          attempts++;
+          await new Promise(r => setTimeout(r, attempts * 10000));
+        } else throw err;
+      }
+    }
+    if (!accountName) throw new Error('Google API quota exceeded after retries');
+  }
 
   const locations = google.mybusinessbusinessinformation({ version: 'v1', auth: oauth2Client });
   const locs = await locations.locations.list({ parent: accountName });
