@@ -139,9 +139,26 @@ app.post('/process-reviews', rateLimit, async (req, res) => {
       const reviews = await getNewReviews(client);
       for (const review of reviews) {
         const response = await generateResponse(review, client);
-        await postResponse(client, review, response);
-        await notifyClient(client, review, response);
-        results.push({ client: client.email, review_id: review.reviewId, status: 'published' });
+        
+        // ── HUMAN-IN-THE-LOOP (Google guide recommendation) ──────────────
+        // Si preview_mode activé : envoyer email de prévisualisation et attendre
+        // Sinon : publier directement (comportement par défaut)
+        if (client.preview_mode) {
+          await sendPreviewEmail(client, review, response);
+          await supabase.from('review_log').insert({
+            client_id: client.id,
+            review_id: review.reviewId,
+            review_text: review.comment,
+            response_text: response,
+            status: 'pending_approval',
+            created_at: new Date().toISOString()
+          });
+          results.push({ client: client.email, review_id: review.reviewId, status: 'pending_approval' });
+        } else {
+          await postResponse(client, review, response);
+          await notifyClient(client, review, response);
+          results.push({ client: client.email, review_id: review.reviewId, status: 'published' });
+        }
       }
     } catch (err) {
       console.error(`Error processing ${client.email}:`, err.message);
@@ -241,6 +258,41 @@ async function notifyClient(client, review, response) {
         ${response}
       </blockquote>
       <p style="color:#888;font-size:12px">AvisBot — avisbot.io</p>
+    `
+  });
+}
+
+// ─── PREVIEW EMAIL (human-in-the-loop) ───────────────────────────────────
+async function sendPreviewEmail(client, review, response) {
+  const stars = '⭐'.repeat(parseInt(review.starRating) || 3);
+  const approveUrl = `https://avisbot-backend.onrender.com/approve-response?clientId=${client.id}&reviewId=${review.reviewId}`;
+  
+  await resend.emails.send({
+    from: process.env.EMAIL_FROM || 'AvisBot <onboarding@resend.dev>',
+    to: client.email,
+    subject: `${stars} AvisBot va répondre dans 1h — validez ou stoppez`,
+    html: `
+      <div style="font-family:sans-serif;max-width:560px;margin:auto">
+        <h3>AvisBot a rédigé une réponse pour vous</h3>
+        <p><strong>Note reçue :</strong> ${stars}</p>
+        <p><strong>Avis :</strong> ${review.comment || '(sans commentaire)'}</p>
+        <hr/>
+        <p><strong>Réponse prévue dans 1h :</strong></p>
+        <blockquote style="border-left:3px solid #2563eb;padding-left:16px;color:#333;font-style:italic">
+          ${response}
+        </blockquote>
+        <p>
+          <a href="${approveUrl}&action=approve" 
+             style="background:#16a34a;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;margin-right:12px">
+            ✅ Publier maintenant
+          </a>
+          <a href="${approveUrl}&action=stop" 
+             style="background:#dc2626;color:white;padding:10px 20px;border-radius:6px;text-decoration:none">
+            ❌ Ne pas publier
+          </a>
+        </p>
+        <p style="color:#888;font-size:12px">Sans action de votre part, la réponse sera publiée automatiquement dans 1h.<br>AvisBot — avisbot.io</p>
+      </div>
     `
   });
 }
