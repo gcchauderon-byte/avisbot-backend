@@ -229,7 +229,7 @@ async function postResponse(client, review, responseText) {
 async function notifyClient(client, review, response) {
   const stars = '⭐'.repeat(parseInt(review.starRating) || 3);
   await resend.emails.send({
-    from: 'AvisBot <contact@avisbot.io>',
+    from: process.env.EMAIL_FROM || 'AvisBot <onboarding@resend.dev>',
     to: client.email,
     subject: `${stars} Nouvel avis répondu automatiquement`,
     html: `
@@ -252,7 +252,7 @@ async function sendWelcomeEmail(email, plan) {
   const onboardingUrl = `https://avisbot-backend.onrender.com/oauth/start?clientId=${clientId}`;
 
   await resend.emails.send({
-    from: 'AvisBot <contact@avisbot.io>',
+    from: process.env.EMAIL_FROM || 'AvisBot <onboarding@resend.dev>',
     to: email,
     subject: '🎉 Bienvenue sur AvisBot — 1 étape pour démarrer',
     html: `
