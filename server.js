@@ -6,6 +6,27 @@ const { Resend } = require('resend');
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 const app = express();
+
+// CORS
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', 'https://avisbot.io');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
+
+// Rate limiting (process-reviews)
+const rateMap = new Map();
+function rateLimit(req, res, next) {
+  const ip = req.ip;
+  const now = Date.now();
+  const last = rateMap.get(ip) || 0;
+  if (now - last < 60000) return res.status(429).json({ error: 'Rate limit' });
+  rateMap.set(ip, now);
+  next();
+}
+
 app.use(express.json());
 app.use(express.raw({ type: 'application/json' })); // pour Stripe webhook
 
@@ -94,7 +115,7 @@ app.get('/oauth/callback', async (req, res) => {
 });
 
 // ─── 4. PROCESS REVIEWS — Appelé par Make.com (cron 4h) ───────────────────
-app.post('/process-reviews', async (req, res) => {
+app.post('/process-reviews', rateLimit, async (req, res) => {
   const { authorization } = req.headers;
   if (authorization !== `Bearer ${process.env.INTERNAL_API_KEY}`) {
     return res.status(401).json({ error: 'Unauthorized' });
