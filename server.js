@@ -108,13 +108,61 @@ app.get('/oauth/callback', async (req, res) => {
       status: 'active'
     }).eq('id', clientId);
 
-    res.send(`
-      <html><body style="font-family:sans-serif;text-align:center;padding:60px">
-        <h2>✅ Google Business connecté !</h2>
-        <p>AvisBot est maintenant actif pour votre établissement.</p>
-        <p>Vous recevrez une notification Telegram à chaque réponse publiée.</p>
-      </body></html>
-    `);
+    res.send(`<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AvisBot — Connexion réussie</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8fafc; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .card { background: white; border-radius: 20px; padding: 40px 32px; max-width: 420px; width: 100%; box-shadow: 0 4px 24px rgba(0,0,0,0.08); text-align: center; }
+    .icon { width: 80px; height: 80px; background: #dcfce7; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; font-size: 36px; animation: pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+    @keyframes pop { 0% { transform: scale(0); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+    h1 { font-size: 22px; font-weight: 700; color: #111; margin-bottom: 10px; }
+    .subtitle { color: #6b7280; font-size: 15px; line-height: 1.6; margin-bottom: 32px; }
+    .steps { text-align: left; background: #f8fafc; border-radius: 12px; padding: 20px; margin-bottom: 28px; }
+    .step { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+    .step:last-child { margin-bottom: 0; }
+    .step-num { width: 28px; height: 28px; background: #2563eb; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+    .step-text { font-size: 14px; color: #374151; line-height: 1.5; }
+    .step-text strong { color: #111; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; background: #eff6ff; color: #2563eb; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 600; }
+    .dot { width: 8px; height: 8px; background: #22c55e; border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">✅</div>
+    <h1>Google Business connecté !</h1>
+    <p class="subtitle">AvisBot est maintenant actif pour votre établissement. Vos prochains avis Google seront répondus automatiquement.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-text"><strong>Scan automatique</strong> — AvisBot vérifie vos nouveaux avis toutes les 4h</div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-text"><strong>Réponse générée</strong> — Une réponse personnalisée adaptée à la note et au contenu</div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-text"><strong>Publication directe</strong> — La réponse est publiée sur Google sans aucune action de votre part</div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-text"><strong>Notification email</strong> — Vous recevez un résumé à chaque réponse publiée</div>
+      </div>
+    </div>
+    <div class="badge">
+      <div class="dot"></div>
+      AvisBot actif
+    </div>
+  </div>
+</body>
+</html>`);
   } catch (err) {
     console.error('OAuth error:', err);
     res.status(500).send('Erreur de connexion Google. Réessayez.');
