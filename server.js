@@ -312,3 +312,50 @@ async function runMigrations() {
 }
 
 runMigrations().catch(console.error);
+
+// ─── ENDPOINT MAKE.COM — Générer une réponse pour 1 avis ──────────────────
+app.post('/generate-response', async (req, res) => {
+  const { authorization } = req.headers;
+  if (authorization !== `Bearer ${process.env.INTERNAL_API_KEY}`) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const { review, rating, restaurant, tone, manager } = req.body;
+  
+  if (!review && !rating) {
+    return res.status(400).json({ error: 'review or rating required' });
+  }
+
+  try {
+    const Anthropic = require('@anthropic-ai/sdk');
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    const message = await anthropic.messages.create({
+      model: 'claude-haiku-4-5',
+      max_tokens: 300,
+      messages: [{
+        role: 'user',
+        content: `Tu es le gérant de "${restaurant || 'notre établissement'}". Réponds à cet avis Google en ${tone || 'professionnel et chaleureux'}.
+        
+Note: ${rating || '?'}/5 étoiles
+Avis: "${review || '(Avis sans commentaire)'}"
+
+Règles:
+- 2-4 phrases maximum
+- Remercie si positif, reconnais le problème si négatif
+- Ne jamais être défensif
+${manager ? `- Signe avec: ${manager}` : ''}
+
+Réponds directement, sans explication.`
+      }]
+    });
+
+    const response = message.content[0].text;
+    res.json({ response, restaurant, rating });
+    
+  } catch (err) {
+    Sentry.captureException(err);
+    console.error('Generate response error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
