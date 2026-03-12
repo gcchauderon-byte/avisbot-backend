@@ -387,7 +387,46 @@ function getPlanName(priceId) {
 app.get('/health', (req, res) => res.json({ status: 'OK', version: '1.0.0' }));
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`AvisBot backend running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`AvisBot backend running on port ${PORT}`);
+
+  // ── CRON INTERNE — remplace Make.com complètement ──────────────────────
+  // Toutes les 4h : scanner les avis + répondre automatiquement
+  try {
+    const cron = require('node-cron');
+    cron.schedule('0 */4 * * *', async () => {
+      console.log('[CRON] process-reviews démarré', new Date().toISOString());
+      try {
+        const { data: clients } = await supabase
+          .from('clients').select('*').eq('status', 'active');
+        for (const client of (clients || [])) {
+          try {
+            const reviews = await getNewReviews(client);
+            for (const review of reviews) {
+              const response = await generateResponse(review, client);
+              if (client.preview_mode) {
+                await sendPreviewEmail(client, review, response);
+              } else {
+                await postResponse(client, review, response);
+                await notifyClient(client, review, response);
+              }
+              console.log(`[CRON] Répondu avis pour ${client.email}`);
+            }
+          } catch (err) {
+            console.error(`[CRON] Erreur ${client.email}:`, err.message);
+            Sentry.captureException(err);
+          }
+        }
+      } catch (err) {
+        console.error('[CRON] Erreur globale:', err.message);
+        Sentry.captureException(err);
+      }
+    });
+    console.log('[CRON] Programmé toutes les 4h ✅');
+  } catch (err) {
+    console.warn('[CRON] node-cron non disponible, utiliser Make.com comme fallback');
+  }
+});
 
 // AUTO-MIGRATION — exécuté au démarrage
 async function runMigrations() {
@@ -458,4 +497,28 @@ Réponds directement, sans explication.`
     console.error('Generate response error:', err.message);
     res.status(500).json({ error: err.message });
   }
+});
+
+// ─── ONBOARDING WIZARD ────────────────────────────────────────────────────
+const path = require('path');
+
+app.get('/onboarding', (req, res) => {
+  res.sendFile(path.join(__dirname, 'onboarding.html'));
+});
+
+app.post('/onboarding/save', async (req, res) => {
+  const { clientId } = req.query;
+  const { restaurantName, managerName, tone, previewMode } = req.body;
+  
+  if (!clientId) return res.status(400).json({ error: 'clientId required' });
+
+  const { error } = await supabase.from('clients').update({
+    restaurant_name: restaurantName,
+    manager_name: managerName,
+    tone: tone || 'professionnel et chaleureux',
+    preview_mode: previewMode || false
+  }).eq('id', clientId);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true });
 });
