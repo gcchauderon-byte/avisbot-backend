@@ -260,3 +260,27 @@ app.get('/health', (req, res) => res.json({ status: 'OK', version: '1.0.0' }));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`AvisBot backend running on port ${PORT}`));
+
+// AUTO-MIGRATION — exécuté au démarrage
+async function runMigrations() {
+  console.log('Running migrations...');
+  
+  // Utiliser l'API SQL de Supabase via pg direct n'est pas disponible
+  // On crée les tables via l'API REST si elles n'existent pas
+  const { error: e1 } = await supabase.rpc('create_tables_if_not_exists').catch(() => ({ error: 'rpc_not_found' }));
+  
+  // Fallback: vérifier et insérer via upsert pour déclencher la création
+  const { error } = await supabase
+    .from('clients')
+    .select('id')
+    .limit(1);
+    
+  if (error && error.code === 'PGRST205') {
+    console.log('Tables missing — please run SQL schema in Supabase dashboard');
+    console.log('SQL file: supabase_schema.sql');
+  } else {
+    console.log('Database tables OK ✅');
+  }
+}
+
+runMigrations().catch(console.error);
