@@ -1,3 +1,10 @@
+const Sentry = require('@sentry/node');
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  tracesSampleRate: 0.2,
+  environment: process.env.NODE_ENV || 'production'
+});
+
 const express = require('express');
 const { google } = require('googleapis');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);

@@ -1,7 +1,7 @@
 {
   "name": "avisbot-backend",
   "version": "1.0.0",
-  "description": "AvisBot backend — Google Business reviews automation",
+  "description": "AvisBot backend \u2014 Google Business reviews automation",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -16,6 +16,7 @@
     "express": "^4.18.2",
     "googleapis": "^140.0.0",
     "resend": "^3.2.0",
-    "stripe": "^14.17.0"
+    "stripe": "^14.17.0",
+    "@sentry/node": "^8.0.0"
   }
 }
