@@ -522,3 +522,45 @@ app.post('/onboarding/save', async (req, res) => {
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
 });
+
+// ─── RENDER DEPLOY WEBHOOK → NOTIFICATION AUTO ───────────────────────────
+app.post('/render-webhook', express.json(), async (req, res) => {
+  try {
+    const event = req.body;
+    const serviceName = event.data?.service?.name || 'avisbot-backend';
+    const deployStatus = event.data?.deploy?.status || event.type;
+    
+    // Notifier uniquement en cas d'échec
+    if (deployStatus === 'build_failed' || deployStatus === 'deploy_failed' || 
+        event.type === 'deploy_failed') {
+      
+      const commitMsg = event.data?.deploy?.commit?.message || 'unknown';
+      const deployId = event.data?.deploy?.id || '?';
+      
+      // Envoyer notification Telegram via bot
+      const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+      const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+      
+      if (BOT_TOKEN && CHAT_ID) {
+        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: CHAT_ID,
+            text: `🚨 *Render Deploy Failed*\n\nService: ${serviceName}\nDeploy: \`${deployId}\`\nCommit: ${commitMsg}\n\nJanet analyse et patch automatiquement...`,
+            parse_mode: 'Markdown'
+          })
+        });
+      }
+      
+      // Log Sentry
+      Sentry.captureMessage(`Deploy failed: ${deployId} - ${commitMsg}`, 'error');
+      console.error(`[WEBHOOK] Deploy failed: ${deployId}`);
+    }
+    
+    res.json({ received: true });
+  } catch (err) {
+    console.error('[WEBHOOK] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
